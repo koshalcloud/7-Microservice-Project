@@ -1,694 +1,646 @@
-# DevOps Shack Polyglot Microservices Lab
+# 🚀 Polyglot Commerce Platform
 
-A complete **7-microservice**, multi-language application that runs locally **without Docker**.
+A production-style **microservices-based e-commerce application** built using multiple programming languages and deployed on **AWS EKS** using Docker, Amazon ECR, Amazon RDS PostgreSQL, Kubernetes, and the AWS Load Balancer Controller.
 
-## Architecture
+This project demonstrates how a polyglot microservices application can be containerized, deployed, connected through Kubernetes service discovery, and exposed to the internet using an AWS Application Load Balancer.
 
-| Port | Service | Language / Framework | Responsibility | PostgreSQL DB |
-|---|---|---|---|---|
-| 8081 | Auth Service | Java 21 + Spring Boot | Register, login, session lookup | `auth_db` |
-| 8082 | Catalog Service | Go | Product CRUD, search, pricing | `catalog_db` |
-| 8083 | Inventory Service | Node.js + Express | Stock, adjust, reserve/release | `inventory_db` |
-| 8084 | Order Service | Python + FastAPI | Checkout orchestration and order lifecycle | `order_db` |
-| 8085 | Payment Service | C# + ASP.NET Core | Capture/refund simulated payments | `payment_db` |
-| 8086 | Notification Service | Ruby + Sinatra | Notification inbox | `notification_db` |
-| 8087 | Analytics Service | PHP | Aggregate service APIs and save snapshots | `analytics_db` |
-| 5173 | Web UI | React + Vite | User interface | — |
+![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white)
+![Kubernetes](https://img.shields.io/badge/Kubernetes-326CE5?style=flat&logo=kubernetes&logoColor=white)
+![AWS](https://img.shields.io/badge/AWS-232F3E?style=flat&logo=amazonaws&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=flat&logo=postgresql&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-green.svg)
 
-PostgreSQL is installed once locally, but every backend service owns a **different database**.
+---
 
-## Complete business flow
+## 📖 Table of Contents
 
-```text
-React UI
-  |
-  +--> Auth :8081 ------------------------> auth_db
-  +--> Catalog :8082 ---------------------> catalog_db
-  +--> Inventory :8083 -------------------> inventory_db
-  +--> Orders :8084 ----------------------> order_db
-  |       |--> Catalog API (validate product + price)
-  |       |--> Inventory API (reserve stock)
-  |       `--> Notification API
-  +--> Payments :8085 --------------------> payment_db
-  |       |--> Orders API (PAID / REFUNDED)
-  |       `--> Notification API
-  +--> Notifications :8086 --------------> notification_db
-  `--> Analytics :8087 ------------------> analytics_db
-          |--> Catalog API
-          |--> Inventory API
-          |--> Orders API
-          `--> Payments API
-```
+- [Architecture](#️-architecture)
+- [Project Overview](#-project-overview)
+- [Backend Services](#backend-services)
+- [Technology Stack](#️-technology-stack)
+- [Application Flow](#-application-flow)
+- [Microservice Communication](#-microservice-communication)
+- [Database Architecture](#️-database-architecture)
+- [Docker Architecture](#-docker-architecture)
+- [Running Locally with Docker Compose](#-running-locally-with-docker-compose)
+- [AWS Deployment Architecture](#️-aws-deployment-architecture)
+- [Amazon ECR](#-amazon-ecr)
+- [Kubernetes Deployment](#️-kubernetes-deployment)
+- [Kubernetes Secrets](#-kubernetes-secrets)
+- [Health Checks](#️-health-checks)
+- [AWS Load Balancer Controller](#-aws-load-balancer-controller)
+- [API Routing](#-api-routing)
+- [Project Structure](#-project-structure)
+- [Testing](#-testing)
+- [Demo Account](#-demo-account)
+- [Deployment Workflow](#-deployment-workflow)
+- [Key DevOps Concepts Demonstrated](#-key-devops-concepts-demonstrated)
+- [Future Improvements](#-future-improvements)
+- [Author](#-author)
 
-## Implemented functionality
+---
 
-- User registration and login
-- Persisted session token
-- Seed admin account
-- Product CRUD
-- Product search
-- Seed product catalog
-- Inventory lookup
-- Stock increase/decrease
-- Transactional stock reservation
-- Transactional release
-- Cart UI
-- Order creation
-- Authoritative price lookup from Catalog
-- Inventory reservation from Order Service
-- Order status updates
-- Payment capture
-- Payment refund
-- Automatic PAID/REFUNDED order status
-- Automatic order/payment/refund notifications
-- Notification inbox and mark-as-read
-- Analytics summary
-- Revenue, order count, AOV, low-stock count and order status breakdown
-- Persist analytics snapshots
-- Health endpoint for all seven services
-- Responsive light-theme UI
-
-# 1. Install prerequisites (Ubuntu / WSL)
-
-```bash
-sudo apt update
-
-sudo apt install -y \
-  postgresql postgresql-contrib \
-  openjdk-21-jdk maven \
-  golang-go \
-  python3 python3-venv python3-pip \
-  ruby-full build-essential libpq-dev \
-  php-cli php-pgsql php-curl \
-  curl git
-```
-
-Install Node.js 22 if required:
-
-```bash
-curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-sudo apt install -y nodejs
-```
-
-Install .NET 8 SDK:
-
-```bash
-sudo apt install -y dotnet-sdk-8.0
-```
-
-If your Ubuntu release does not expose `dotnet-sdk-8.0` directly, install .NET 8 SDK from Microsoft's Ubuntu package repository, then continue.
-
-Verify:
-
-```bash
-java -version
-mvn -version
-go version
-python3 --version
-node --version
-npm --version
-dotnet --version
-ruby --version
-php --version
-psql --version
-```
-
-# 2. Start PostgreSQL
-
-```bash
-sudo systemctl enable --now postgresql
-```
-
-If your WSL installation does not use systemd:
-
-```bash
-sudo service postgresql start
-```
-
-# 3. Create all databases
-
-From the project root:
-
-```bash
-sudo -u postgres psql -f database/bootstrap.sql
-```
-
-This creates:
+## 🏗️ Architecture
 
 ```text
-PostgreSQL user: microapp
-Password:        microapp123
-
-auth_db
-catalog_db
-inventory_db
-order_db
-payment_db
-notification_db
-analytics_db
+                         ┌─────────────────────┐
+                         │        Users         │
+                         └──────────┬──────────┘
+                                    │
+                                    ▼
+                         ┌─────────────────────┐
+                         │   AWS ALB / Ingress  │
+                         └──────────┬──────────┘
+                                    │
+                                    ▼
+                         ┌─────────────────────┐
+                         │    React Frontend    │
+                         │       + Nginx        │
+                         └──────────┬──────────┘
+                                    │
+                 ┌──────────────────┼──────────────────┐
+                 │                  │                  │
+                 ▼                  ▼                  ▼
+          ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+          │    Auth     │    │   Catalog   │    │  Inventory  │
+          │ Java/Spring │    │     Go      │    │   Node.js   │
+          │    8081     │    │    8082     │    │    8083     │
+          └──────┬──────┘    └──────┬──────┘    └──────┬──────┘
+                 │                  │                  │
+                 └──────────────────┼──────────────────┘
+                                    │
+                 ┌──────────────────┼──────────────────┐
+                 │                  │                  │
+                 ▼                  ▼                  ▼
+          ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+          │    Order    │    │   Payment   │    │Notification │
+          │   Python    │    │     C#      │    │    Ruby     │
+          │    8084     │    │    8085     │    │    8086     │
+          └──────┬──────┘    └──────┬──────┘    └──────┬──────┘
+                 │                  │                  │
+                 └──────────────────┼──────────────────┘
+                                    │
+                                    ▼
+                            ┌───────────────┐
+                            │   Analytics   │
+                            │      PHP      │
+                            │     8087      │
+                            └───────┬───────┘
+                                    │
+                                    ▼
+                         ┌─────────────────────┐
+                         │     Amazon RDS       │
+                         │     PostgreSQL       │
+                         │                      │
+                         │    7 Separate DBs    │
+                         └─────────────────────┘
 ```
 
-Verify:
+---
 
-```bash
-sudo -u postgres psql -c "\l"
-```
+## 📸 Screenshots
 
-Test normal TCP login:
+### Frontend — Microservice Control Center
 
-```bash
-psql -h 127.0.0.1 -U microapp -d catalog_db
-```
+| Overview Dashboard | Product Catalog |
+|---|---|
+| ![Overview](docs/screenshots/01-overview-dashboard.png) | ![Catalog](docs/screenshots/02-catalog-service.png) |
 
-Password:
+| Orders & Cart | Notifications |
+|---|---|
+| ![Orders & Cart](docs/screenshots/03-orders-cart.png) | ![Notifications](docs/screenshots/04-notifications-1.png) |
+
+| Payment Ledger | Live Analytics |
+|---|---|
+| ![Payments](docs/screenshots/05-payments-ledger.png) | ![Analytics](docs/screenshots/07-analytics-dashboard.png) |
+
+The dashboard ties together the full order lifecycle end to end — adding items to cart via the **Python (FastAPI) Order Service**, capturing payment via the **C# (ASP.NET Core) Payment Service**, firing a notification via the **Ruby (Sinatra) Notification Service**, and rolling everything up into the **PHP Analytics Service**.
+
+### Infrastructure — AWS EKS Deployment
+
+| Kubernetes Pods (all 8 services running) | EKS Cluster |
+|---|---|
+| ![kubectl get pods](docs/screenshots/08-kubectl-get-pods.png) | ![EKS Cluster](docs/screenshots/09-eks-cluster.png) |
+
+| EC2 Worker Nodes | Amazon RDS PostgreSQL |
+|---|---|
+| ![EC2 Instances](docs/screenshots/10-ec2-instances.png) | ![RDS PostgreSQL](docs/screenshots/11-rds-postgres.png) |
+
+**Amazon ECR — Private Repositories**
+
+![ECR Repositories](docs/screenshots/12-ecr-repositories.png)
+
+All 7 microservices plus the frontend are pushed as separate images to Amazon ECR, deployed as independent Kubernetes Deployments on EKS, and exposed through an AWS Application Load Balancer via Ingress.
+
+> 📁 To render these images on GitHub, add the `docs/screenshots/` folder (included in this download) to your repository root, next to `README.md`.
+
+---
+
+## 🌍 Live Deployment Details
+
+The platform is currently deployed and running on **Amazon EKS** in the `ap-south-1` (Mumbai) region.
+
+### Application Access
+
+| Item | Value |
+|---|---|
+| Frontend URL (ALB) | `k8s-polyglot-polyglot-9fb4fb3dd5-2002075130.ap-south-1.elb.amazonaws.com` |
+| Demo login | `koshalkarma@gmail.com` |
+
+### EKS Cluster
+
+| Item | Value |
+|---|---|
+| Cluster name | `polyglot-commerce` |
+| Kubernetes version | `1.34` |
+| Region | Asia Pacific (Mumbai) — `ap-south-1` |
+| Cluster ARN | `arn:aws:eks:ap-south-1:249123960212:cluster/polyglot-commerce` |
+| API server endpoint | `https://0889CCEA8F8B16FF27F08CA17FC7F545.gr7.ap-south-1.eks.amazonaws.com` |
+| OIDC provider | `oidc.eks.ap-south-1.amazonaws.com/id/0889CCEA8F8B16FF27F08CA17FC7F545` |
+| Cluster IAM role | `arn:aws:iam::249123960212:role/eksctl-polyglot-cluster-ServiceRole-kaZbNgGRjqw6` |
+
+### EC2 Worker Nodes
+
+| Instance | Type | AZ | Status |
+|---|---|---|---|
+| `i-08d301ff871884ed6` | c7i-flex.large | ap-south-1a | Running |
+| `i-0dee39ca533ab6a60` | m7i-flex.large | ap-south-1c | Running |
+| `i-0a378eb41eb251199` | c7i-flex.large | ap-south-1c | Running |
+
+### Amazon RDS (PostgreSQL)
+
+| Item | Value |
+|---|---|
+| DB identifier | `polyglot-postgres` |
+| Engine | PostgreSQL |
+| Instance class | `db.t3.micro` |
+| Endpoint | `polyglot-postgres.cdcm0s2ye4a1.ap-south-1.rds.amazonaws.com` |
+| Port | `5432` |
+
+### Amazon ECR — Repository URIs
+
+| Repository | URI |
+|---|---|
+| auth-service | `249123960212.dkr.ecr.ap-south-1.amazonaws.com/auth-service` |
+| catalog-service | `249123960212.dkr.ecr.ap-south-1.amazonaws.com/catalog-service` |
+| inventory-service | `249123960212.dkr.ecr.ap-south-1.amazonaws.com/inventory-service` |
+| order-service | `249123960212.dkr.ecr.ap-south-1.amazonaws.com/order-service` |
+| payment-service | `249123960212.dkr.ecr.ap-south-1.amazonaws.com/payment-service` |
+| notification-service | `249123960212.dkr.ecr.ap-south-1.amazonaws.com/notification-service` |
+| analytics-service | `249123960212.dkr.ecr.ap-south-1.amazonaws.com/analytics-service` |
+| polyglot-commerce-frontend | `249123960212.dkr.ecr.ap-south-1.amazonaws.com/polyglot-commerce-frontend` |
+
+### Kubernetes Pods (namespace: `polyglot-commerce`)
 
 ```text
-microapp123
+NAME                                    READY   STATUS    RESTARTS   AGE
+analytics-service-54d4c57db9-5qcbl      1/1     Running   0          60m
+auth-service-7bb4fb44df-5pz9s           1/1     Running   0          155m
+catalog-service-74f6657859-2ww2w        1/1     Running   0          146m
+frontend-858557c86d-p8qjj               1/1     Running   0          55m
+inventory-service-6bf694d97b-l5xp5      1/1     Running   0          80m
+notification-service-6569cf5757-hl69t   1/1     Running   0          61m
+order-service-857ff7b654-npvc5          1/1     Running   0          66m
+payment-service-6486dc8c95-kqwrs        1/1     Running   0          63m
 ```
 
-Then:
+> ⚠️ **Note:** This is a personal demo/learning deployment. The AWS Account ID, endpoints, and cluster identifiers above are exposed here for transparency and portfolio purposes. If you fork or redeploy this project, replace these with your own resource identifiers, keep credentials out of source control, and avoid using a long-lived personal AWS account ID in a public production setup.
 
-```sql
-\q
-```
+---
 
-# 4. Install application dependencies
+## 📌 Project Overview
 
-Run these once.
+This project is a **polyglot e-commerce platform** consisting of **7 backend microservices** and a **React frontend**.
 
-## Java Auth
+Each backend service is implemented using a different technology to demonstrate a real-world polyglot microservices architecture. The application is containerized using Docker and deployed to an **AWS EKS** Kubernetes cluster.
 
-```bash
-cd services/auth-service
-mvn clean package -DskipTests
-cd ../..
-```
+### Backend Services
 
-## Go Catalog
+| Service | Technology | Port | Database |
+|---|---|---|---|
+| Auth Service | Java 21 + Spring Boot | 8081 | `auth_db` |
+| Catalog Service | Go | 8082 | `catalog_db` |
+| Inventory Service | Node.js + Express | 8083 | `inventory_db` |
+| Order Service | Python + FastAPI | 8084 | `order_db` |
+| Payment Service | C# + ASP.NET Core | 8085 | `payment_db` |
+| Notification Service | Ruby + Sinatra | 8086 | `notification_db` |
+| Analytics Service | PHP | 8087 | `analytics_db` |
+| Frontend | React + Vite + Nginx | 80 | — |
 
-```bash
-cd services/catalog-service
-go mod tidy
-cd ../..
-```
+---
 
-## Node Inventory
+## 🛠️ Technology Stack
 
-```bash
-cd services/inventory-service
-npm install
-cd ../..
-```
+**Application**
+- Java 21, Spring Boot
+- Go
+- Node.js, Express.js
+- Python, FastAPI
+- C#, ASP.NET Core
+- Ruby, Sinatra
+- PHP
+- React, Vite, Nginx
 
-## Python Orders
+**Containerization**
+- Docker
+- Docker Compose
 
-```bash
-cd services/order-service
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip setuptools wheel
-pip install -r requirements.txt
-deactivate
-cd ../..
-```
+**AWS**
+- Amazon ECR
+- Amazon EKS
+- Amazon RDS (PostgreSQL)
+- AWS IAM
+- IAM Roles for Service Accounts (IRSA)
+- AWS Load Balancer Controller
+- Application Load Balancer
 
-## C# Payments
+**Kubernetes**
+- Deployments
+- Services
+- ConfigMaps / environment variables
+- Kubernetes Secrets
+- Readiness & Liveness Probes
+- Ingress
+- ClusterIP Services
 
-```bash
-cd services/payment-service
-dotnet restore
-cd ../..
-```
+---
 
-## Ruby Notifications
+## 🔄 Application Flow
 
-```bash
-cd services/notification-service
-
-export GEM_HOME="$HOME/.local/share/gem/ruby/3.3.0"
-export GEM_PATH="$GEM_HOME"
-export PATH="$GEM_HOME/bin:$PATH"
-
-gem install bundler
-
-bundle config set --local path "$HOME/.bundle"
-bundle install
-
-cd ../..
-
-echo 'export GEM_HOME="$HOME/.local/share/gem/ruby/3.3.0"' >> ~/.bashrc
-echo 'export GEM_PATH="$GEM_HOME"' >> ~/.bashrc
-echo 'export PATH="$GEM_HOME/bin:$PATH"' >> ~/.bashrc
-
-source ~/.bashrc
-```
-
-## PHP Analytics
-
-No Composer packages are needed.
-
-Check PHP extensions:
-
-```bash
-php -m | grep -E "pdo_pgsql|curl"
-```
-
-## React frontend
-
-```bash
-cd frontend
-npm install
-cd ..
-```
-
-# 5. Start the services
-
-Use separate terminals.
-
-## Terminal 1 — Auth / Java — 8081
-
-```bash
-cd services/auth-service
-mvn spring-boot:run
-```
-
-Health:
-
-```bash
-curl http://localhost:8081/health
-```
-
-Demo account:
+A typical request flows through the following path:
 
 ```text
-admin@devopsshack.com
-admin123
+User
+  │
+  ▼
+AWS Application Load Balancer
+  │
+  ▼
+Kubernetes Ingress
+  │
+  ├── /                    → Frontend
+  ├── /api/auth             → Auth Service
+  ├── /api/catalog          → Catalog Service
+  ├── /api/inventory        → Inventory Service
+  ├── /api/orders           → Order Service
+  ├── /api/payments         → Payment Service
+  ├── /api/notifications    → Notification Service
+  └── /api/analytics        → Analytics Service
 ```
 
-## Terminal 2 — Catalog / Go — 8082
-
-```bash
-cd services/catalog-service
-go run .
-```
-
-Health:
-
-```bash
-curl http://localhost:8082/health
-```
-
-Products:
-
-```bash
-curl http://localhost:8082/products
-```
-
-## Terminal 3 — Inventory / Node.js — 8083
-
-```bash
-cd services/inventory-service
-npm start
-```
-
-Health:
-
-```bash
-curl http://localhost:8083/health
-```
-
-Inventory:
-
-```bash
-curl http://localhost:8083/inventory
-```
-
-## Terminal 4 — Notification / Ruby — 8086
-
-Start this before Orders and Payments because those services call it.
-
-```bash
-cd services/notification-service
-bundle exec ruby app.rb
-```
-
-Health:
-
-```bash
-curl http://localhost:8086/health
-```
-
-## Terminal 5 — Orders / Python — 8084
-
-```bash
-cd services/order-service
-source .venv/bin/activate
-uvicorn app.main:app --host 0.0.0.0 --port 8084 --reload
-```
-
-Health:
-
-```bash
-curl http://localhost:8084/health
-```
-
-Swagger:
+Backend services communicate with each other using Kubernetes internal DNS, e.g.:
 
 ```text
-http://localhost:8084/docs
+Order Service
+  ├── Catalog Service
+  ├── Inventory Service
+  └── Notification Service
 ```
 
-## Terminal 6 — Payments / C# — 8085
+---
 
-```bash
-cd services/payment-service
-dotnet run
-```
+## 🔗 Microservice Communication
 
-Health:
-
-```bash
-curl http://localhost:8085/health
-```
-
-## Terminal 7 — Analytics / PHP — 8087
-
-```bash
-cd services/analytics-service
-php -S 0.0.0.0:8087 router.php
-```
-
-Health:
-
-```bash
-curl http://localhost:8087/health
-```
-
-## Terminal 8 — React UI — 5173
-
-```bash
-cd frontend
-npm run dev -- --host 0.0.0.0
-```
-
-Open:
-
+**Order Service**
 ```text
-http://localhost:5173
+Order
+ ├── Catalog
+ ├── Inventory
+ └── Notification
 ```
 
-# 6. Recommended startup order
+**Payment Service**
+```text
+Payment
+ ├── Order
+ ├── Inventory
+ └── Notification
+```
+
+**Analytics Service**
+```text
+Analytics
+ ├── Catalog
+ ├── Inventory
+ ├── Order
+ └── Payment
+```
+
+---
+
+## 🗄️ Database Architecture
+
+The application uses **Amazon RDS PostgreSQL** in the AWS deployment. Each microservice has its own database, following the **database-per-service** pattern for logical data separation:
 
 ```text
 PostgreSQL
-Auth          :8081
-Catalog       :8082
-Inventory     :8083
-Notification  :8086
-Orders        :8084
-Payments      :8085
-Analytics     :8087
-Frontend      :5173
+│
+├── auth_db
+├── catalog_db
+├── inventory_db
+├── order_db
+├── payment_db
+├── notification_db
+└── analytics_db
 ```
 
-# 7. Test the complete flow manually
+---
 
-## Login
+## 🐳 Docker Architecture
 
-```bash
-curl -X POST http://localhost:8081/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"admin@devopsshack.com","password":"admin123"}'
-```
-
-## View products
-
-```bash
-curl http://localhost:8082/products
-```
-
-## Check product 1 inventory
-
-```bash
-curl http://localhost:8083/inventory/1
-```
-
-## Create an order
-
-```bash
-curl -X POST http://localhost:8084/orders \
-  -H "Content-Type: application/json" \
-  -d '{
-    "user_email":"admin@devopsshack.com",
-    "items":[
-      {"product_id":1,"quantity":2},
-      {"product_id":2,"quantity":1}
-    ]
-  }'
-```
-
-What happens internally:
+Every backend service has its own `Dockerfile`:
 
 ```text
-Client
-  |
-  | POST /orders
-  v
-Order Service
-  |
-  +--> GET Catalog /products/{id}
-  |      obtains authoritative name + price
-  |
-  +--> POST Inventory /inventory/reserve
-  |      reserves all lines inside a DB transaction
-  |
-  +--> INSERT order_db.orders
-  |
-  `--> POST Notification /notifications
+services/
+├── auth-service/
+│   └── Dockerfile
+├── catalog-service/
+│   └── Dockerfile
+├── inventory-service/
+│   └── Dockerfile
+├── order-service/
+│   └── Dockerfile
+├── payment-service/
+│   └── Dockerfile
+├── notification-service/
+│   └── Dockerfile
+└── analytics-service/
+    └── Dockerfile
 ```
 
-## List orders
-
-```bash
-curl http://localhost:8084/orders
-```
-
-## Capture payment
-
-Use the exact order total returned by the Order Service.
-
-```bash
-curl -X POST http://localhost:8085/payments \
-  -H "Content-Type: application/json" \
-  -d '{
-    "orderId":1,
-    "amount":224.48,
-    "method":"CARD",
-    "recipient":"admin@devopsshack.com"
-  }'
-```
-
-The Payment Service first validates the authoritative order amount, commits the reserved inventory, persists the payment, changes the order to `PAID`, and sends a notification.
-
-## Refund payment 1
-
-```bash
-curl -X POST http://localhost:8085/payments/1/refund
-```
-
-## Notifications
-
-```bash
-curl "http://localhost:8086/notifications?recipient=admin@devopsshack.com"
-```
-
-## Analytics
-
-```bash
-curl http://localhost:8087/analytics/summary
-```
-
-Save a snapshot in `analytics_db`:
-
-```bash
-curl -X POST http://localhost:8087/analytics/snapshot
-```
-
-# 8. Important API endpoints
-
-## Auth :8081
+The frontend is also containerized using a **multi-stage build**:
 
 ```text
-GET  /health
-POST /auth/register
-POST /auth/login
-GET  /auth/me?token=<token>
+frontend/
+├── Dockerfile
+└── nginx.conf
 ```
-
-## Catalog :8082
 
 ```text
-GET    /health
-GET    /products
-GET    /products?q=search-text
-GET    /products/{id}
-POST   /products
-PUT    /products/{id}
-DELETE /products/{id}
+React Source → Node.js Build Stage → Production Build → Nginx Container
 ```
 
-## Inventory :8083
+---
 
-```text
-GET  /health
-GET  /inventory
-GET  /inventory/{productId}
-POST /inventory/{productId}/adjust
-POST /inventory/reserve
-POST /inventory/release
-POST /inventory/commit
-POST /inventory/return
-```
+## 🐋 Running Locally with Docker Compose
 
-## Orders :8084
+Make sure Docker and Docker Compose are installed.
 
-```text
-GET  /health
-GET  /orders
-GET  /orders/{id}
-POST /orders
-PUT  /orders/{id}/status
-```
-
-## Payments :8085
-
-```text
-GET  /health
-GET  /payments
-POST /payments
-POST /payments/{id}/refund
-```
-
-## Notifications :8086
-
-```text
-GET  /health
-GET  /notifications
-POST /notifications
-POST /notifications/{id}/read
-```
-
-## Analytics :8087
-
-```text
-GET  /health
-GET  /analytics/summary
-GET  /analytics/snapshots
-POST /analytics/snapshot
-```
-
-# 9. Inspect each database
-
-Example:
-
+**1. Clone the repository**
 ```bash
-psql -h 127.0.0.1 -U microapp -d order_db
+git clone https://github.com/koshalcloud/7-Microservice-Project.git
+cd 7-Microservice-Project
 ```
 
-Then:
-
-```sql
-\dt
-SELECT * FROM orders;
-\q
-```
-
-Other databases:
-
+**2. Start the complete application**
 ```bash
-psql -h 127.0.0.1 -U microapp -d auth_db
-psql -h 127.0.0.1 -U microapp -d catalog_db
-psql -h 127.0.0.1 -U microapp -d inventory_db
-psql -h 127.0.0.1 -U microapp -d payment_db
-psql -h 127.0.0.1 -U microapp -d notification_db
-psql -h 127.0.0.1 -U microapp -d analytics_db
+docker compose up -d --build
 ```
 
-# 10. Why this is truly microservice-based
+**3. Check running containers**
+```bash
+docker compose ps
+```
 
-The services do not query each other's databases.
+**4. View logs**
+```bash
+docker compose logs -f
+```
 
-For example, the Python Order Service does **not** run SQL against `catalog_db` or `inventory_db`.
+**5. Stop the application**
+```bash
+docker compose down
+```
 
-It uses:
+The frontend can then be accessed at:
+```text
+http://localhost:8080
+```
+
+---
+
+## ☁️ AWS Deployment Architecture
 
 ```text
-GET  http://localhost:8082/products/1
-POST http://localhost:8083/inventory/reserve
+                    Internet
+                       │
+                       ▼
+              ┌─────────────────┐
+              │     AWS ALB      │
+              └────────┬────────┘
+                       │
+                       ▼
+              ┌─────────────────┐
+              │   Kubernetes     │
+              │     Ingress      │
+              └────────┬────────┘
+                       │
+                       ▼
+              ┌─────────────────┐
+              │   Amazon EKS     │
+              │     Cluster      │
+              └────────┬────────┘
+                       │
+          ┌────────────┼────────────┐
+          │            │            │
+          ▼            ▼            ▼
+       Frontend    Microservices   Services
+                       │
+                       ▼
+              ┌─────────────────┐
+              │   Amazon RDS     │
+              │   PostgreSQL     │
+              └─────────────────┘
 ```
 
-So the boundary is:
+---
+
+## 📦 Amazon ECR
+
+Each service is stored as a separate Docker image in Amazon ECR:
 
 ```text
-Order Service -> HTTP -> Inventory Service -> inventory_db
+Amazon ECR
+│
+├── auth-service
+├── catalog-service
+├── inventory-service
+├── order-service
+├── payment-service
+├── notification-service
+├── analytics-service
+└── polyglot-commerce-frontend
 ```
 
-not:
+**Example image URI:**
+```text
+<aws-account-id>.dkr.ecr.<region>.amazonaws.com/auth-service:1.0
+```
+
+---
+
+## ☸️ Kubernetes Deployment
+
+Kubernetes manifests are available inside `k8s/`:
 
 ```text
-Order Service ---------------------------> inventory_db
+k8s/
+├── auth.yaml
+├── catalog.yaml
+├── inventory.yaml
+├── order.yaml
+├── payment.yaml
+├── notification.yaml
+├── analytics.yaml
+├── frontend.yaml
+└── ingress.yaml
 ```
 
-Each backend service:
-
-- starts as a separate operating-system process,
-- has its own port,
-- has its own runtime/language,
-- owns its own database,
-- exposes its own API,
-- can be restarted independently,
-- communicates through the network.
-
-# 11. Health check
-
-Once everything is running:
-
-```bash
-bash scripts/health-check.sh
-```
-
-# 12. Optional one-command start
-
-After dependencies are installed:
-
-```bash
-bash scripts/start-all.sh
-```
-
-Stop:
-
-```bash
-bash scripts/stop-all.sh
-```
-
-Logs:
+Each backend service is deployed as:
 
 ```text
-logs/
+Deployment → Pods → ClusterIP Service
 ```
 
-# 13. Troubleshooting
+---
 
-## PostgreSQL connection refused
+## 🔐 Kubernetes Secrets
 
-```bash
-sudo service postgresql status
-sudo service postgresql start
-ss -lntp | grep 5432
+Database credentials are provided to Kubernetes workloads using Secrets, e.g.:
+
+```text
+postgres-app-secret
 ```
 
-## A backend port is down
+> ⚠️ **Sensitive database credentials should never be committed to source control.**
+> For production environments, credentials should be managed using a proper secret-management solution (e.g. AWS Secrets Manager / External Secrets Operator) and rotated regularly.
 
+---
+
+## ❤️ Health Checks
+
+Every backend service exposes a health endpoint:
+
+```text
+/health
+```
+
+Kubernetes uses **readiness** and **liveness** probes to monitor service health:
+
+```yaml
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8081
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8081
+```
+
+This helps Kubernetes determine:
+- Whether a Pod is ready to receive traffic
+- Whether a container is healthy
+- When a container should be restarted
+
+---
+
+## 🌐 AWS Load Balancer Controller
+
+The project uses the **AWS Load Balancer Controller** to integrate Kubernetes Ingress with an AWS Application Load Balancer:
+
+```text
+Internet
+   │
+   ▼
+AWS Application Load Balancer
+   │
+   ▼
+Kubernetes Ingress
+   │
+   ├── Frontend
+   ├── Auth
+   ├── Catalog
+   ├── Inventory
+   ├── Orders
+   ├── Payments
+   ├── Notifications
+   └── Analytics
+```
+
+Backend services remain internal, exposed only via Kubernetes `ClusterIP` Services.
+
+---
+
+## 🔀 API Routing
+
+The ALB Ingress routes requests based on URL path:
+
+| Path | Service |
+|---|---|
+| `/api/auth/*` | Auth Service |
+| `/api/catalog/*` | Catalog Service |
+| `/api/inventory/*` | Inventory Service |
+| `/api/orders/*` | Order Service |
+| `/api/payments/*` | Payment Service |
+| `/api/notifications/*` | Notification Service |
+| `/api/analytics/*` | Analytics Service |
+| `/` | Frontend |
+
+The AWS Load Balancer Controller's URL rewrite functionality is used where required to map frontend API paths to backend endpoints.
+
+---
+
+## 📁 Project Structure
+
+```text
+7-Microservice-Project/
+│
+├── database/
+│   └── bootstrap.sql
+│
+├── frontend/
+│   ├── src/
+│   ├── Dockerfile
+│   ├── nginx.conf
+│   ├── package.json
+│   └── vite.config.js
+│
+├── services/
+│   ├── auth-service/
+│   ├── catalog-service/
+│   ├── inventory-service/
+│   ├── order-service/
+│   ├── payment-service/
+│   ├── notification-service/
+│   └── analytics-service/
+│
+├── k8s/
+│   ├── auth.yaml
+│   ├── catalog.yaml
+│   ├── inventory.yaml
+│   ├── order.yaml
+│   ├── payment.yaml
+│   ├── notification.yaml
+│   ├── analytics.yaml
+│   ├── frontend.yaml
+│   └── ingress.yaml
+│
+├── docs/
+├── scripts/
+├── docker-compose.yml
+├── ARCHITECTURE.md
+├── PROJECT-STRUCTURE.txt
+├── Steps.md
+└── README.md
+```
+
+---
+
+## 🧪 Testing
+
+**Health endpoints (local):**
 ```bash
 curl http://localhost:8081/health
 curl http://localhost:8082/health
@@ -699,16 +651,113 @@ curl http://localhost:8086/health
 curl http://localhost:8087/health
 ```
 
-## Reset databases
-
+**Kubernetes:**
 ```bash
-sudo -u postgres psql -c "DROP DATABASE IF EXISTS auth_db;"
-sudo -u postgres psql -c "DROP DATABASE IF EXISTS catalog_db;"
-sudo -u postgres psql -c "DROP DATABASE IF EXISTS inventory_db;"
-sudo -u postgres psql -c "DROP DATABASE IF EXISTS order_db;"
-sudo -u postgres psql -c "DROP DATABASE IF EXISTS payment_db;"
-sudo -u postgres psql -c "DROP DATABASE IF EXISTS notification_db;"
-sudo -u postgres psql -c "DROP DATABASE IF EXISTS analytics_db;"
-
-sudo -u postgres psql -f database/bootstrap.sql
+kubectl get pods -n polyglot-commerce
+kubectl get services -n polyglot-commerce
+kubectl get ingress -n polyglot-commerce
 ```
+
+**Application logs:**
+```bash
+kubectl logs deployment/auth-service -n polyglot-commerce
+```
+
+---
+
+## 🔑 Demo Account
+
+For local/demo testing only:
+
+```text
+Email: admin@devopsshack.com
+Password: admin123
+```
+
+> ⚠️ **Change these demo credentials before using the application in any real production environment.**
+
+---
+
+## 🚀 Deployment Workflow
+
+```text
+Developer
+    │
+    ▼
+GitHub
+    │
+    ▼
+Docker Build
+    │
+    ▼
+Amazon ECR
+    │
+    ▼
+Amazon EKS
+    │
+    ├── Kubernetes Deployments
+    ├── Kubernetes Services
+    ├── Kubernetes Secrets
+    └── Kubernetes Ingress
+              │
+              ▼
+       AWS Load Balancer
+              │
+              ▼
+            Users
+
+EKS ───────────────► Amazon RDS PostgreSQL
+```
+
+---
+
+## 🎯 Key DevOps Concepts Demonstrated
+
+- Microservices architecture
+- Polyglot application development
+- Docker containerization & multi-stage builds
+- Docker Compose
+- Amazon ECR & Amazon EKS
+- Kubernetes Deployments, Services, Secrets
+- Kubernetes health probes (readiness/liveness)
+- Kubernetes Ingress
+- AWS Load Balancer Controller & Application Load Balancer
+- Amazon RDS PostgreSQL
+- IAM & IAM Roles for Service Accounts (IRSA)
+- Kubernetes service discovery & internal microservice communication
+- API routing
+- Containerized frontend deployment
+- Cloud-native application deployment
+
+---
+
+## 📌 Future Improvements
+
+- [ ] Horizontal Pod Autoscaler (HPA)
+- [ ] CPU / memory resource requests & limits
+- [ ] HTTPS with AWS Certificate Manager (ACM)
+- [ ] Route 53 custom domain
+- [ ] External Secrets / AWS Secrets Manager integration
+- [ ] CloudWatch monitoring
+- [ ] Centralized logging
+- [ ] Prometheus and Grafana
+- [ ] CI/CD using GitHub Actions
+- [ ] Rolling deployment strategies
+- [ ] Network policies
+- [ ] Pod disruption budgets
+- [ ] Automated database migrations
+
+---
+
+## 👨‍💻 Author
+
+**Kaushal Karma**
+Cloud / DevOps Project
+
+---
+
+## ⭐ Support
+
+If you find this project useful, please give the repository a ⭐ and feel free to explore the architecture and deployment configuration.
+
+> **Note:** For security, the actual RDS endpoint, AWS Account ID, and production credentials have been intentionally excluded from this README, since this is a public repository.

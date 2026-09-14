@@ -1,31 +1,53 @@
-devopsshack-polyglot-microservices/.gitignore
-devopsshack-polyglot-microservices/ARCHITECTURE.md
-devopsshack-polyglot-microservices/PROJECT-STRUCTURE.txt
-devopsshack-polyglot-microservices/README.md
-devopsshack-polyglot-microservices/database/bootstrap.sql
-devopsshack-polyglot-microservices/docs/API-EXAMPLES.md
-devopsshack-polyglot-microservices/frontend/index.html
-devopsshack-polyglot-microservices/frontend/package.json
-devopsshack-polyglot-microservices/frontend/src/App.jsx
-devopsshack-polyglot-microservices/frontend/src/api.js
-devopsshack-polyglot-microservices/frontend/src/main.jsx
-devopsshack-polyglot-microservices/frontend/src/styles.css
-devopsshack-polyglot-microservices/scripts/health-check.sh
-devopsshack-polyglot-microservices/scripts/start-all.sh
-devopsshack-polyglot-microservices/scripts/stop-all.sh
-devopsshack-polyglot-microservices/services/analytics-service/router.php
-devopsshack-polyglot-microservices/services/auth-service/pom.xml
-devopsshack-polyglot-microservices/services/auth-service/src/main/java/com/devopsshack/auth/AuthApplication.java
-devopsshack-polyglot-microservices/services/auth-service/src/main/java/com/devopsshack/auth/AuthController.java
-devopsshack-polyglot-microservices/services/auth-service/src/main/resources/application.properties
-devopsshack-polyglot-microservices/services/catalog-service/go.mod
-devopsshack-polyglot-microservices/services/catalog-service/main.go
-devopsshack-polyglot-microservices/services/inventory-service/package.json
-devopsshack-polyglot-microservices/services/inventory-service/src/index.js
-devopsshack-polyglot-microservices/services/notification-service/Gemfile
-devopsshack-polyglot-microservices/services/notification-service/app.rb
-devopsshack-polyglot-microservices/services/order-service/app/__init__.py
-devopsshack-polyglot-microservices/services/order-service/app/main.py
-devopsshack-polyglot-microservices/services/order-service/requirements.txt
-devopsshack-polyglot-microservices/services/payment-service/Program.cs
-devopsshack-polyglot-microservices/services/payment-service/payment-service.csproj
+7-Microservice-Project/
+│
+├── database/
+│   └── bootstrap.sql
+│
+├── frontend/
+│   ├── src/
+│   ├── Dockerfile
+│   ├── nginx.conf
+│   ├── package.json
+│   └── vite.config.js
+│
+├── services/
+│   ├── auth-service/          # Java 21 + Spring Boot
+│   ├── catalog-service/       # Go
+│   ├── inventory-service/     # Node.js + Express
+│   ├── order-service/         # Python + FastAPI
+│   ├── payment-service/       # C# + ASP.NET Core
+│   ├── notification-service/  # Ruby + Sinatra
+│   └── analytics-service/     # PHP
+│
+├── k8s/
+│   ├── auth.yaml
+│   ├── catalog.yaml
+│   ├── inventory.yaml
+│   ├── order.yaml
+│   ├── payment.yaml
+│   ├── notification.yaml
+│   ├── analytics.yaml
+│   ├── frontend.yaml
+│   └── ingress.yaml
+│
+├── docs/
+│   └── screenshots/            # ← naya added, app + AWS proof screenshots
+│       ├── 01-overview-dashboard.png
+│       ├── 02-catalog-service.png
+│       ├── 03-orders-cart.png
+│       ├── 04-notifications-1.png
+│       ├── 05-payments-ledger.png
+│       ├── 06-notifications-2.png
+│       ├── 07-analytics-dashboard.png
+│       ├── 08-kubectl-get-pods.png
+│       ├── 09-eks-cluster.png
+│       ├── 10-ec2-instances.png
+│       ├── 11-rds-postgres.png
+│       └── 12-ecr-repositories.png
+│
+├── scripts/
+├── docker-compose.yml
+├── ARCHITECTURE.md
+├── PROJECT-STRUCTURE.txt
+├── Steps.md
+└── README.md

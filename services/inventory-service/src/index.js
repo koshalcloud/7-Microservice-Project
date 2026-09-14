@@ -5,8 +5,14 @@ import pg from "pg";
 const { Pool } = pg;
 const app = express();
 const pool = new Pool({
-  connectionString: process.env.INVENTORY_DB_URL ||
-    "postgres://microapp:microapp123@127.0.0.1:5432/inventory_db"
+  host: process.env.DB_HOST || "127.0.0.1",
+  port: Number(process.env.DB_PORT || 5432),
+  database: process.env.DB_NAME || "inventory_db",
+  user: process.env.DB_USER || "microapp",
+  password: process.env.DB_PASSWORD || "microapp123",
+  ssl: {
+    rejectUnauthorized: false
+  }
 });
 
 app.use(cors());
